@@ -1,0 +1,310 @@
+import express from "express";
+import path from "path";
+import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// File paths
+const PRINTED_TODOS_FILE = path.join(__dirname, "../data/printed-todos.json");
+const DATA_DIR = path.join(__dirname, "../data");
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Types
+interface Todo {
+  id: string;
+  todo: string;
+  deadline?: string;
+  assignee: string;
+  createdAt: string;
+}
+
+interface PrintedTodo extends Todo {
+  printedAt: string;
+}
+
+interface PrinterStatus {
+  printer_id: string;
+  current_status: string;
+  last_updated: string;
+  is_online: boolean;
+  has_error: boolean;
+  error_type: string | null;
+  description: string;
+  can_print: boolean;
+}
+
+interface PrintStats {
+  totalPrinted: number;
+  lastPrintTime?: string;
+  printErrors: number;
+}
+
+// In-memory storage
+let todos: Todo[] = [];
+let printerStatus: PrinterStatus = {
+  printer_id: "EPSON_TM-T88V",
+  current_status: "offline",
+  last_updated: new Date().toISOString(),
+  is_online: false,
+  has_error: false,
+  error_type: null,
+  description: "Printer is offline",
+  can_print: false,
+};
+let printStats: PrintStats = {
+  totalPrinted: 0,
+  printErrors: 0,
+};
+
+// Helper functions for printed todos
+function loadPrintedTodos(): PrintedTodo[] {
+  try {
+    if (fs.existsSync(PRINTED_TODOS_FILE)) {
+      const data = fs.readFileSync(PRINTED_TODOS_FILE, "utf8");
+      return JSON.parse(data);
+    }
+    return [];
+  } catch (error) {
+    console.error("Error loading printed todos:", error);
+    return [];
+  }
+}
+
+function savePrintedTodos(printedTodos: PrintedTodo[]): void {
+  try {
+    fs.writeFileSync(PRINTED_TODOS_FILE, JSON.stringify(printedTodos, null, 2));
+  } catch (error) {
+    console.error("Error saving printed todos:", error);
+  }
+}
+
+function addToPrintedTodos(todo: Todo): void {
+  const printedTodos = loadPrintedTodos();
+  const printedTodo: PrintedTodo = {
+    ...todo,
+    printedAt: new Date().toISOString(),
+  };
+  printedTodos.push(printedTodo);
+  savePrintedTodos(printedTodos);
+}
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, "../public")));
+
+// Middleware to check if printer status is stale (older than 10 seconds)
+app.use((req, res, next) => {
+  const now = new Date();
+  const lastUpdated = new Date(printerStatus.last_updated);
+  const timeDiff = now.getTime() - lastUpdated.getTime();
+
+  // If status is older than 10 seconds and not already offline, mark as offline
+  if (timeDiff > 10000 && printerStatus.is_online) {
+    printerStatus = {
+      ...printerStatus,
+      current_status: "offline",
+      last_updated: now.toISOString(),
+      is_online: false,
+      has_error: true,
+      error_type: "timeout",
+      description: "Printer connection timeout - no updates for 10+ seconds",
+      can_print: false,
+    };
+  }
+
+  next();
+});
+
+// Routes
+
+// 1. Index route - serves the main page
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "../public/index.html"));
+});
+
+// 2. Todos routes - Optimized for POS printer polling
+app.get("/todos", (req, res) => {
+  // Sort by deadline for printer (todos with deadlines first, then by creation time)
+  const sortedTodos = todos.sort((a, b) => {
+    // If both have deadlines, sort by deadline
+    if (a.deadline && b.deadline) {
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    }
+    // If only one has deadline, it goes first
+    if (a.deadline && !b.deadline) return -1;
+    if (!a.deadline && b.deadline) return 1;
+    // If neither has deadline, sort by creation time
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
+  res.json(sortedTodos);
+});
+
+app.post("/todos", (req, res) => {
+  const { todo, deadline, assignee } = req.body;
+
+  if (!todo || !assignee) {
+    return res
+      .status(400)
+      .json({ error: "Missing required fields: todo, assignee" });
+  }
+
+  const newTodo: Todo = {
+    id: uuidv4(),
+    todo,
+    deadline: deadline || undefined,
+    assignee,
+    createdAt: new Date().toISOString(),
+  };
+
+  todos.push(newTodo);
+  res.status(201).json(newTodo);
+});
+
+app.delete("/todos/:id", (req, res) => {
+  const { id } = req.params;
+  const todoToDelete = todos.find((todo) => todo.id === id);
+
+  if (!todoToDelete) {
+    return res.status(404).json({ error: "Todo not found" });
+  }
+
+  // Add to printed todos file
+  addToPrintedTodos(todoToDelete);
+
+  // Remove from active todos
+  todos = todos.filter((todo) => todo.id !== id);
+
+  // Track successful print
+  printStats.totalPrinted++;
+  printStats.lastPrintTime = new Date().toISOString();
+
+  res.status(204).send();
+});
+
+// New endpoint to retrieve printed todos history
+app.get("/printed-todos", (req, res) => {
+  const printedTodos = loadPrintedTodos();
+
+  // Sort by printedAt timestamp, most recent first
+  const sortedPrintedTodos = printedTodos.sort(
+    (a, b) => new Date(b.printedAt).getTime() - new Date(a.printedAt).getTime()
+  );
+
+  res.json(sortedPrintedTodos);
+});
+
+// 3. Printer status routes - Enhanced for POS monitoring
+app.put("/printer-status", (req, res) => {
+  const {
+    printer_id,
+    current_status,
+    is_online,
+    has_error,
+    error_type,
+    description,
+    can_print,
+  } = req.body;
+
+  if (!current_status) {
+    return res.status(400).json({ error: "current_status is required" });
+  }
+
+  printerStatus = {
+    printer_id: printer_id || printerStatus.printer_id,
+    current_status,
+    last_updated: new Date().toISOString(),
+    is_online: is_online !== undefined ? is_online : true,
+    has_error: has_error !== undefined ? has_error : false,
+    error_type: error_type || null,
+    description: description || `Printer status: ${current_status}`,
+    can_print: can_print !== undefined ? can_print : true,
+  };
+
+  // Track error if status indicates problem
+  if (
+    has_error ||
+    current_status.toLowerCase().includes("error") ||
+    current_status.toLowerCase().includes("jam")
+  ) {
+    printStats.printErrors++;
+  }
+
+  res.json(printerStatus);
+});
+
+app.get("/printer-status", (req, res) => {
+  res.json(printerStatus);
+});
+
+// Test endpoint to simulate different printer statuses
+app.post("/test-status/:status", (req, res) => {
+  const { status } = req.params;
+
+  switch (status) {
+    case "online":
+      printerStatus = {
+        printer_id: "EPSON_TM-T88V",
+        current_status: "online",
+        last_updated: new Date().toISOString(),
+        is_online: true,
+        has_error: false,
+        error_type: null,
+        description: "Printer is ready and operational",
+        can_print: true,
+      };
+      break;
+    case "paper_jam":
+      printerStatus = {
+        printer_id: "EPSON_TM-T88V",
+        current_status: "paper_jam",
+        last_updated: new Date().toISOString(),
+        is_online: false,
+        has_error: true,
+        error_type: "paper_jam",
+        description: "Paper jam detected - please clear the jam",
+        can_print: false,
+      };
+      break;
+    case "paper_empty":
+      printerStatus = {
+        printer_id: "EPSON_TM-T88V",
+        current_status: "paper_empty",
+        last_updated: new Date().toISOString(),
+        is_online: false,
+        has_error: true,
+        error_type: "paper_empty",
+        description: "Paper is empty - please refill paper",
+        can_print: false,
+      };
+      break;
+    default:
+      return res.status(400).json({ error: "Unknown status" });
+  }
+
+  res.json({ message: `Status set to ${status}`, printerStatus });
+});
+
+// Additional endpoint for print statistics
+app.get("/print-stats", (req, res) => {
+  const printedTodos = loadPrintedTodos();
+
+  res.json({
+    ...printStats,
+    pendingTodos: todos.length,
+    totalPrintedFromFile: printedTodos.length,
+    printerOnline: printerStatus.is_online,
+    lastActivity: printerStatus.last_updated,
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
