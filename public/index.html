@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <title>Todo App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            },
+            fontSize: {
+              xs: "0.75rem",
+              sm: "0.875rem",
+              base: "1rem",
+              lg: "1.125rem",
+              xl: "1.25rem",
+              "2xl": "1.5rem",
+              "3xl": "1.875rem",
+            },
+            colors: {
+              primary: '#000000',
+              secondary: '#4a4a4a',
+              muted: '#6b6b6b',
+              subtle: '#9a9a9a',
+              border: '#e5e5e5',
+              surface: '#fafafa',
+              alert: '#dc2626',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    </style>
+  </head>
+  <body class="bg-white min-h-screen font-sans">
+    <!-- Printer Status Bar (ultra-slim, mobile-first) -->
+    <div
+      id="printStatusBanner"
+      class="fixed top-0 left-0 w-full z-50 bg-black text-white text-[11px] font-medium px-2 flex items-center justify-center"
+      style="height: 18px"
+    >
+      <!-- Dynamic status banner -->
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav
+      class="fixed bottom-0 left-0 w-full bg-white border-t border-border z-40"
+    >
+      <div class="max-w-md mx-auto flex">
+        <button
+          onclick="showView('add')"
+          id="nav-add"
+          class="flex-1 py-3 px-2 text-center text-xs font-medium text-black bg-surface border-t-2 border-black"
+        >
+          <div class="text-lg mb-1">+</div>
+          Add
+        </button>
+        <button
+          onclick="showView('queue')"
+          id="nav-queue"
+          class="flex-1 py-3 px-2 text-center text-xs font-medium text-muted border-t-2 border-transparent"
+        >
+          <div class="text-lg mb-1">=</div>
+          Queue
+        </button>
+        <button
+          onclick="showView('status')"
+          id="nav-status"
+          class="flex-1 py-3 px-2 text-center text-xs font-medium text-muted border-t-2 border-transparent"
+        >
+          <div class="text-lg mb-1">i</div>
+          Status
+        </button>
+      </div>
+    </nav>
+
+    <div class="max-w-md mx-auto px-3 py-4 sm:px-4 sm:py-6 pt-6 pb-20">
+      <!-- Add View -->
+      <div id="view-add" class="view">
+        <!-- Add Todo Form -->
+        <div
+          class="bg-white border border-border p-4 mb-6"
+        >
+          <h2
+            class="text-lg font-semibold mb-4 text-black"
+          >
+            Add to Queue
+          </h2>
+          <form id="todoForm" class="space-y-4">
+            <div>
+              <label
+                for="todo"
+                class="block text-sm font-medium text-black mb-2"
+                >Task</label
+              >
+              <textarea
+                id="todo"
+                name="todo"
+                required
+                rows="2"
+                class="w-full px-4 py-3 text-base border border-border rounded focus:outline-none focus:ring-1 focus:ring-black focus:border-black resize-none"
+                placeholder="What needs to be printed?"
+              ></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-black mb-2"
+                >Assignee</label
+              >
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onclick="selectAssignee('Kathy', this)"
+                  class="assignee-btn flex flex-col items-center justify-center py-3 px-2 border border-border rounded hover:border-black focus:outline-none transition duration-200 bg-white"
+                >
+                  <div class="text-sm font-medium text-secondary">Kathy</div>
+                </button>
+
+                <button
+                  type="button"
+                  onclick="selectAssignee('Daniel', this)"
+                  class="assignee-btn flex flex-col items-center justify-center py-3 px-2 border border-border rounded hover:border-black focus:outline-none transition duration-200 bg-white"
+                >
+                  <div class="text-sm font-medium text-secondary">Daniel</div>
+                </button>
+
+                <button
+                  type="button"
+                  onclick="selectAssignee('', this)"
+                  class="assignee-btn flex flex-col items-center justify-center py-3 px-2 border-2 border-black rounded focus:outline-none transition duration-200 bg-surface"
+                  id="defaultAssignee"
+                >
+                  <div class="text-sm font-medium text-black">
+                    None
+                  </div>
+                </button>
+              </div>
+              <input type="hidden" id="assignee" name="assignee" value="" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-black mb-2"
+                >Deadline</label
+              >
+              <div class="grid grid-cols-4 gap-2 mb-3">
+                <button
+                  type="button"
+                  onclick="selectDeadline('Heute', this)"
+                  class="deadline-btn flex flex-col items-center justify-center py-2 px-2 border border-border rounded hover:border-black focus:outline-none transition duration-200 bg-white"
+                >
+                  <div class="text-xs font-medium text-secondary">Today</div>
+                </button>
+
+                <button
+                  type="button"
+                  onclick="selectDeadline('Morgen', this)"
+                  class="deadline-btn flex flex-col items-center justify-center py-2 px-2 border border-border rounded hover:border-black focus:outline-none transition duration-200 bg-white"
+                >
+                  <div class="text-xs font-medium text-secondary">Tomorrow</div>
+                </button>
+
+                <button
+                  type="button"
+                  onclick="selectDeadline('none', this)"
+                  class="deadline-btn flex flex-col items-center justify-center py-2 px-2 border border-border rounded hover:border-black focus:outline-none transition duration-200 bg-white"
+                >
+                  <div class="text-xs font-medium text-secondary">
+                    None
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onclick="selectDeadline('custom', this)"
+                  class="deadline-btn flex flex-col items-center justify-center py-2 px-2 border border-border rounded hover:border-black focus:outline-none transition duration-200 bg-white"
+                >
+                  <div class="text-xs font-medium text-secondary">Custom</div>
+                </button>
+              </div>
+
+              <!-- Custom date input (hidden by default) -->
+              <div id="customDateContainer" class="hidden">
+                <input
+                  type="datetime-local"
+                  id="customDeadline"
+                  name="customDeadline"
+                  class="w-full px-4 py-3 text-base border border-border rounded focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
+                  placeholder="Select custom date..."
+                />
+              </div>
+
+              <input type="hidden" id="deadline" name="deadline" value="" />
+            </div>
+
+            <!-- Frequently Printed Tasks -->
+            <div id="frequentTasksSection" class="hidden">
+              <label class="block text-sm font-medium text-black mb-2">
+                Recent
+              </label>
+              <div id="frequentTasksList" class="space-y-2 mb-4">
+                <!-- Frequent tasks will be loaded here -->
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              class="w-full bg-black text-white py-3 px-4 rounded hover:bg-secondary active:bg-black focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 transition duration-200 text-base font-semibold"
+            >
+              Add to Queue
+            </button>
+          </form>
+        </div>
+      </div>
+      <!-- End Add View -->
+
+      <!-- Queue View -->
+      <div id="view-queue" class="view hidden">
+        <!-- Print Queue -->
+        <div
+          class="bg-white border border-border p-4 mb-6"
+        >
+          <h2
+            class="text-lg font-semibold mb-4 text-black flex items-center justify-between"
+          >
+            <span>Queue</span>
+            <span
+              id="queueCount"
+              class="text-sm bg-surface text-secondary px-2 py-1 rounded"
+              >0</span
+            >
+          </h2>
+          <div id="todosList" class="space-y-3">
+            <!-- Todos will be loaded here -->
+          </div>
+        </div>
+
+        <!-- Printed Tasks History -->
+        <div class="bg-white border border-border p-4">
+          <h2
+            class="text-lg font-semibold mb-4 text-black flex items-center justify-between"
+          >
+            <span>Printed</span>
+            <span
+              id="printedCount"
+              class="text-sm bg-black text-white px-2 py-1 rounded"
+              >0</span
+            >
+          </h2>
+          <div id="printedTasksList" class="space-y-2">
+            <!-- Printed tasks will be loaded here -->
+          </div>
+        </div>
+      </div>
+      <!-- End Queue View -->
+
+      <!-- Status View -->
+      <div id="view-status" class="view hidden">
+        <div class="bg-white border border-border p-4">
+          <h2
+            class="text-lg font-semibold mb-4 text-black"
+          >
+            Printer Status
+          </h2>
+          <div id="printerStatusDisplay" class="space-y-4">
+            <!-- Printer status will be loaded here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Navigation functionality
+      function showView(viewName) {
+        // Hide all views
+        document.querySelectorAll(".view").forEach((view) => {
+          view.classList.add("hidden");
+        });
+
+        // Show selected view
+        document.getElementById(`view-${viewName}`).classList.remove("hidden");
+
+        // Update navigation buttons
+        document.querySelectorAll("nav button").forEach((btn) => {
+          btn.classList.remove("text-black", "bg-surface", "border-black");
+          btn.classList.add("text-muted", "border-transparent");
+        });
+
+        document
+          .getElementById(`nav-${viewName}`)
+          .classList.remove("text-muted", "border-transparent");
+        document
+          .getElementById(`nav-${viewName}`)
+          .classList.add("text-black", "bg-surface", "border-black");
+
+        // Load view-specific data
+        if (viewName === "status") {
+          loadPrinterStatusDisplay();
+        } else if (viewName === "queue") {
+          loadTodos();
+          loadPrintedTasks();
+        } else if (viewName === "add") {
+          loadFrequentTasks();
+        }
+      }
+
+      // Auto-refresh intervals for POS monitoring
+      let todoRefreshInterval;
+      let printerStatusInterval;
+
+      // Load todos on page load
+      document.addEventListener("DOMContentLoaded", function () {
+        // Initialize with add view
+        showView("add");
+
+        loadTodos();
+        loadPrinterStatus();
+
+        // Auto-refresh every 5 seconds to simulate printer polling
+        todoRefreshInterval = setInterval(loadTodos, 5000);
+        printerStatusInterval = setInterval(loadPrinterStatus, 5000);
+      });
+
+      // Handle form submission
+      document
+        .getElementById("todoForm")
+        .addEventListener("submit", async function (e) {
+          e.preventDefault();
+
+          const formData = new FormData(e.target);
+          const todoData = {
+            todo: formData.get("todo"),
+            deadline: formData.get("deadline"),
+            assignee: formData.get("assignee"),
+          };
+
+          try {
+            const response = await fetch("/todos", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(todoData),
+            });
+
+            if (response.ok) {
+              e.target.reset();
+              // Reset assignee button selection to default (unassigned)
+              document.querySelectorAll(".assignee-btn").forEach((btn) => {
+                btn.classList.remove("border-2", "border-black", "bg-surface");
+                btn.classList.add("border", "border-border", "bg-white");
+              });
+              // Set unassigned as default
+              const defaultBtn = document.getElementById("defaultAssignee");
+              defaultBtn.classList.remove("border", "border-border", "bg-white");
+              defaultBtn.classList.add("border-2", "border-black", "bg-surface");
+              document.getElementById("assignee").value = "";
+
+              loadTodos();
+              showNotification("Added to queue", "success");
+            } else {
+              alert("Error adding to queue");
+            }
+          } catch (error) {
+            alert("Error adding to queue");
+          }
+        });
+
+      // Load and display todos with deadline handling
+      async function loadTodos() {
+        try {
+          const response = await fetch("/todos");
+          const todos = await response.json();
+
+          const todosList = document.getElementById("todosList");
+          const queueCount = document.getElementById("queueCount");
+
+          queueCount.textContent = todos.length;
+
+          if (todos.length === 0) {
+            todosList.innerHTML =
+              '<div class="text-center py-8"><p class="text-muted">Queue empty</p><p class="text-sm text-subtle">Add tasks to queue for printing</p></div>';
+            return;
+          }
+
+          todosList.innerHTML = todos
+            .map((item) => {
+              // Handle shopping list
+              if (item.type === "SHOPPING_LIST") {
+                return `
+                  <div class="border-2 border-black p-3 bg-surface">
+                    <div class="mb-2">
+                      <div class="text-xs text-muted uppercase tracking-wide mb-1">Shopping List</div>
+                      <h3 class="font-semibold text-black text-sm">${escapeHtml(item.title)}</h3>
+                    </div>
+                    <ul class="text-sm text-secondary mb-3 space-y-1">
+                      ${item.items.map(i => `<li class="flex items-center gap-2"><span class="w-1.5 h-1.5 bg-black rounded-full"></span>${escapeHtml(i)}</li>`).join('')}
+                    </ul>
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-xs text-muted">${item.items.length} items</span>
+                      <span class="text-xs text-subtle font-mono">#${item.id.substring(0, 6)}</span>
+                    </div>
+                    <button onclick="deleteTodo('${item.id}')"
+                            class="w-full bg-alert text-white py-2 px-3 rounded text-xs font-medium hover:bg-red-700 active:bg-red-800 transition duration-150">
+                        Remove
+                    </button>
+                  </div>
+                `;
+              }
+
+              // Handle regular todo
+              const assigneeText = item.assignee || "Unassigned";
+              const deadlineHtml = item.deadline
+                ? `<span class="text-xs text-muted">${formatDate(item.deadline)}</span>`
+                : "";
+
+              return `
+                  <div class="border border-border p-3 bg-white">
+                    <div class="mb-2">
+                      <h3 class="font-medium text-black text-sm leading-tight">${escapeHtml(item.todo)}</h3>
+                    </div>
+                    <div class="flex items-center justify-between mb-2">
+                      <div class="flex items-center gap-3 text-xs text-secondary">
+                        <span>${escapeHtml(assigneeText)}</span>
+                        ${deadlineHtml}
+                      </div>
+                      <span class="text-xs text-subtle font-mono">#${item.id.substring(0, 6)}</span>
+                    </div>
+                    <button onclick="deleteTodo('${item.id}')"
+                            class="w-full bg-alert text-white py-2 px-3 rounded text-xs font-medium hover:bg-red-700 active:bg-red-800 transition duration-150">
+                        Remove
+                    </button>
+                  </div>
+                `;
+            })
+            .join("");
+        } catch (error) {
+          document.getElementById("todosList").innerHTML =
+            '<div class="text-center py-8"><p class="text-alert">Error loading queue</p><p class="text-sm text-subtle">Please check connection</p></div>';
+        }
+      }
+
+      // Load and display printed tasks
+      async function loadPrintedTasks() {
+        try {
+          const response = await fetch("/printed-todos");
+          const printedTodos = await response.json();
+
+          const printedTasksList = document.getElementById("printedTasksList");
+          const printedCount = document.getElementById("printedCount");
+
+          printedCount.textContent = printedTodos.length;
+
+          if (printedTodos.length === 0) {
+            printedTasksList.innerHTML =
+              '<div class="text-center py-6"><p class="text-muted">No printed tasks yet</p><p class="text-sm text-subtle">Completed prints appear here</p></div>';
+            return;
+          }
+
+          // Show only the last 10 printed tasks to keep the view manageable
+          const recentPrintedTodos = printedTodos.slice(0, 10);
+
+          printedTasksList.innerHTML = recentPrintedTodos
+            .map((item) => {
+              // Handle shopping list
+              if (item.type === "SHOPPING_LIST") {
+                return `
+                  <div class="border border-border p-3 bg-surface">
+                    <div class="mb-2">
+                      <div class="text-xs text-muted uppercase tracking-wide mb-1">Shopping List</div>
+                      <h4 class="font-medium text-black text-sm">${escapeHtml(item.title)}</h4>
+                    </div>
+                    <div class="space-y-1">
+                      <div class="flex items-center justify-between">
+                        <div class="text-xs text-secondary">${item.items.length} items</div>
+                        <div class="text-xs text-black font-medium">${formatDate(item.printedAt)}</div>
+                      </div>
+                      <div class="text-xs text-subtle font-mono">#${item.id.substring(0, 6)}</div>
+                    </div>
+                  </div>
+                `;
+              }
+
+              // Handle regular todo
+              const assigneeText = item.assignee || "Unassigned";
+              const deadlineHtml = item.deadline
+                ? `<div class="text-xs text-muted">Due: ${formatDate(item.deadline)}</div>`
+                : "";
+
+              return `
+                  <div class="border border-border p-3 bg-surface">
+                    <div class="mb-2">
+                      <h4 class="font-medium text-black text-sm leading-relaxed">${escapeHtml(item.todo)}</h4>
+                    </div>
+                    <div class="space-y-1">
+                      <div class="flex items-center justify-between">
+                        <div class="text-xs text-secondary">${escapeHtml(assigneeText)}</div>
+                        <div class="text-xs text-black font-medium">${formatDate(item.printedAt)}</div>
+                      </div>
+                      ${deadlineHtml}
+                      <div class="text-xs text-subtle font-mono">#${item.id.substring(0, 6)}</div>
+                    </div>
+                  </div>
+                `;
+            })
+            .join("");
+
+          // Add "show more" link if there are more than 10 printed tasks
+          if (printedTodos.length > 10) {
+            printedTasksList.innerHTML += `
+              <div class="text-center py-2">
+                <span class="text-sm text-subtle">Showing 10 of ${printedTodos.length}</span>
+              </div>
+            `;
+          }
+        } catch (error) {
+          document.getElementById("printedTasksList").innerHTML =
+            '<div class="text-center py-6"><p class="text-alert">Error loading printed tasks</p><p class="text-sm text-subtle">Please check connection</p></div>';
+        }
+      }
+
+      // Load frequent tasks based on printed history
+      async function loadFrequentTasks() {
+        try {
+          const response = await fetch("/printed-todos");
+          const printedTodos = await response.json();
+
+          const frequentSection = document.getElementById(
+            "frequentTasksSection"
+          );
+          const frequentList = document.getElementById("frequentTasksList");
+
+          if (printedTodos.length === 0) {
+            frequentSection.classList.add("hidden");
+            return;
+          }
+
+          // Analyze frequency of tasks (group by similar content)
+          const taskFrequency = {};
+          printedTodos.forEach((todo) => {
+            const normalizedTask = todo.todo.toLowerCase().trim();
+            if (taskFrequency[normalizedTask]) {
+              taskFrequency[normalizedTask].count++;
+              taskFrequency[normalizedTask].lastPrinted = Math.max(
+                taskFrequency[normalizedTask].lastPrinted,
+                new Date(todo.printedAt).getTime()
+              );
+            } else {
+              taskFrequency[normalizedTask] = {
+                count: 1,
+                original: todo.todo,
+                assignee: todo.assignee,
+                deadline: todo.deadline,
+                lastPrinted: new Date(todo.printedAt).getTime(),
+              };
+            }
+          });
+
+          // Sort by frequency and recency (tasks printed more than once, or recently)
+          const frequentTasks = Object.entries(taskFrequency)
+            .filter(
+              ([_, data]) =>
+                data.count > 1 ||
+                Date.now() - data.lastPrinted < 7 * 24 * 60 * 60 * 1000
+            ) // More than once OR within last 7 days
+            .sort((a, b) => {
+              // First sort by count (frequency)
+              if (b[1].count !== a[1].count) {
+                return b[1].count - a[1].count;
+              }
+              // Then by recency
+              return b[1].lastPrinted - a[1].lastPrinted;
+            })
+            .slice(0, 5); // Show top 5
+
+          if (frequentTasks.length === 0) {
+            frequentSection.classList.add("hidden");
+            return;
+          }
+
+          frequentSection.classList.remove("hidden");
+
+          frequentList.innerHTML = frequentTasks
+            .map(
+              ([task, data]) => `
+            <button
+              type="button"
+              onclick="useFrequentTask('${escapeHtml(
+                data.original
+              )}', '${escapeHtml(data.assignee)}', '${data.deadline || ""}')"
+              class="w-full text-left p-3 border border-border hover:border-black hover:bg-surface transition duration-150 bg-white"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex-1">
+                  <div class="font-medium text-black text-sm">${escapeHtml(
+                    data.original
+                  )}</div>
+                  <div class="text-xs text-muted mt-1">
+                    ${escapeHtml(data.assignee)} · ${data.count}x
+                    ${
+                      data.deadline
+                        ? ` · ${formatDate(data.deadline)}`
+                        : ""
+                    }
+                  </div>
+                </div>
+                <div class="text-black ml-2">
+                  <span class="text-lg">+</span>
+                </div>
+              </div>
+            </button>
+          `
+            )
+            .join("");
+        } catch (error) {
+          console.error("Error loading frequent tasks:", error);
+          document
+            .getElementById("frequentTasksSection")
+            .classList.add("hidden");
+        }
+      }
+
+      // Use frequent task to populate form
+      function useFrequentTask(task, assignee, deadline) {
+        // Fill in the task description
+        document.getElementById("todo").value = task;
+
+        // Set assignee
+        document.querySelectorAll(".assignee-btn").forEach((btn) => {
+          btn.classList.remove("border-2", "border-black", "bg-surface");
+          btn.classList.add("border", "border-border", "bg-white");
+        });
+
+        // Find and select the matching assignee button
+        const assigneeButtons = document.querySelectorAll(".assignee-btn");
+        assigneeButtons.forEach((btn) => {
+          if (btn.textContent.trim().includes(assignee)) {
+            btn.classList.remove("border", "border-border", "bg-white");
+            btn.classList.add("border-2", "border-black", "bg-surface");
+          }
+        });
+        document.getElementById("assignee").value = assignee;
+
+        // Set deadline if available
+        if (deadline) {
+          document.getElementById("deadline").value = deadline;
+          // Note: Could also try to match deadline cards, but custom date is simpler
+        }
+
+        // Scroll to top of form for user to review
+        document
+          .getElementById("todo")
+          .scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("todo").focus();
+      }
+
+      // Update print status banner (ultra-slim mobile design)
+      function updatePrintStatusBanner(printerStatus) {
+        const banner = document.getElementById("printStatusBanner");
+
+        let bgColor = "bg-secondary";
+        let statusText = printerStatus.current_status.replace("_", " ").toUpperCase();
+
+        if (printerStatus.has_error) {
+          bgColor = "bg-alert";
+        } else if (printerStatus.is_online && printerStatus.can_print) {
+          bgColor = "bg-black";
+        } else if (printerStatus.is_online) {
+          bgColor = "bg-muted";
+        }
+
+        // Update the background color
+        banner.className = `fixed top-0 left-0 w-full z-50 ${bgColor} text-white text-[11px] font-medium px-2 flex items-center justify-center`;
+
+        // Simple single line status
+        banner.innerHTML = statusText;
+      }
+
+      // Delete todo
+      async function deleteTodo(id) {
+        if (!confirm("Remove this task from print queue?")) {
+          return;
+        }
+
+        // Show loading state
+        event.target.innerHTML = "Removing...";
+        event.target.disabled = true;
+
+        try {
+          const response = await fetch(`/todos/${id}`, {
+            method: "DELETE",
+          });
+
+          if (response.ok) {
+            loadTodos();
+            showNotification("Removed from queue", "info");
+          } else {
+            alert("Error removing from queue");
+            // Reset button state
+            event.target.innerHTML = "Remove";
+            event.target.disabled = false;
+          }
+        } catch (error) {
+          alert("Error removing from queue");
+          // Reset button state
+          event.target.innerHTML = "Remove";
+          event.target.disabled = false;
+        }
+      }
+
+      // Load printer status display for status view
+      async function loadPrinterStatusDisplay() {
+        try {
+          const response = await fetch("/printer-status");
+          const status = await response.json();
+
+          const statusDisplay = document.getElementById("printerStatusDisplay");
+          if (statusDisplay) {
+            // Get status styling based on status
+            let statusColor = "bg-surface text-black";
+            let statusBorderColor = "border-border";
+            let statusIndicator = "bg-muted";
+
+            if (status.has_error) {
+              statusColor = "bg-white text-black";
+              statusBorderColor = "border-alert";
+              statusIndicator = "bg-alert";
+            } else if (status.is_online && status.can_print) {
+              statusColor = "bg-white text-black";
+              statusBorderColor = "border-black";
+              statusIndicator = "bg-black";
+            } else if (status.is_online) {
+              statusColor = "bg-white text-black";
+              statusBorderColor = "border-muted";
+              statusIndicator = "bg-muted";
+            }
+
+            statusDisplay.innerHTML = `
+              <!-- Main Status Card -->
+              <div class="border ${statusBorderColor} p-4 ${statusColor}">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center">
+                    <div class="w-3 h-3 rounded-full ${statusIndicator} mr-3"></div>
+                    <div>
+                      <div class="font-semibold text-lg text-black">${status.printer_id}</div>
+                      <div class="text-sm text-secondary">${status.current_status.replace("_", " ").toUpperCase()}</div>
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-xs text-muted">Updated</div>
+                    <div class="text-sm font-medium text-black">${new Date(status.last_updated).toLocaleTimeString()}</div>
+                  </div>
+                </div>
+
+                <div class="text-sm text-secondary mb-3">${status.description}</div>
+
+                <!-- Status Details Grid -->
+                <div class="grid grid-cols-2 gap-3 text-xs border-t border-border pt-3">
+                  <div class="flex justify-between">
+                    <span class="text-muted">Online</span>
+                    <span class="font-medium text-black">${status.is_online ? "Yes" : "No"}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-muted">Can Print</span>
+                    <span class="font-medium text-black">${status.can_print ? "Yes" : "No"}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-muted">Error</span>
+                    <span class="font-medium ${status.has_error ? 'text-alert' : 'text-black'}">${status.has_error ? "Yes" : "No"}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-muted">Type</span>
+                    <span class="font-medium text-black">${status.error_type || "—"}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        } catch (error) {
+          console.error("Error loading printer status:", error);
+          const statusDisplay = document.getElementById("printerStatusDisplay");
+          if (statusDisplay) {
+            statusDisplay.innerHTML = `
+              <div class="border border-alert p-4 bg-white">
+                <div class="flex items-center">
+                  <div class="w-3 h-3 rounded-full bg-alert mr-3"></div>
+                  <div>
+                    <div class="font-semibold text-black">Connection Error</div>
+                    <div class="text-sm text-secondary">Unable to load printer status</div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        }
+      }
+
+      // Load printer status with enhanced monitoring
+      async function loadPrinterStatus() {
+        try {
+          const statusResponse = await fetch("/printer-status");
+          const status = await statusResponse.json();
+
+          updatePrintStatusBanner(status);
+        } catch (error) {
+          console.error("Error loading printer status:", error);
+          // Show error state in banner
+          const banner = document.getElementById("printStatusBanner");
+          banner.className =
+            "fixed top-0 left-0 w-full z-50 bg-alert text-white text-[11px] font-medium px-2 flex items-center justify-center";
+          banner.innerHTML = "CONNECTION ERROR";
+        }
+      }
+
+      // Simple notification system
+      function showNotification(message, type = "info") {
+        const notification = document.createElement("div");
+        notification.className = `fixed top-6 right-4 px-4 py-2 rounded text-white font-medium z-50 text-sm ${
+          type === "success"
+            ? "bg-black"
+            : type === "error"
+            ? "bg-alert"
+            : "bg-secondary"
+        }`;
+        notification.textContent = message;
+
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+          notification.remove();
+        }, 3000);
+      }
+
+      // Assignee selection function
+      function selectAssignee(assignee, button) {
+        // Remove selected state from all buttons
+        document.querySelectorAll(".assignee-btn").forEach((btn) => {
+          btn.classList.remove("border-2", "border-black", "bg-surface");
+          btn.classList.add("border", "border-border", "bg-white");
+        });
+
+        // Add selected state to clicked button
+        button.classList.remove("border", "border-border", "bg-white");
+        button.classList.add("border-2", "border-black", "bg-surface");
+
+        // Set the hidden input value
+        document.getElementById("assignee").value = assignee;
+      }
+
+      // Deadline selection function
+      function selectDeadline(deadlineType, button) {
+        // Remove selected state from all deadline buttons
+        document.querySelectorAll(".deadline-btn").forEach((btn) => {
+          btn.classList.remove("border-2", "border-black", "bg-surface");
+          btn.classList.add("border", "border-border", "bg-white");
+        });
+
+        // Add selected state to clicked button
+        button.classList.remove("border", "border-border", "bg-white");
+        button.classList.add("border-2", "border-black", "bg-surface");
+
+        const deadlineInput = document.getElementById("deadline");
+        const customContainer = document.getElementById("customDateContainer");
+        const customInput = document.getElementById("customDeadline");
+
+        if (deadlineType === "custom") {
+          // Show custom date input
+          customContainer.classList.remove("hidden");
+          customInput.focus();
+          // Clear the deadline value until custom date is selected
+          deadlineInput.value = "";
+        } else {
+          // Hide custom date input
+          customContainer.classList.add("hidden");
+
+          // Calculate actual dates for predefined options
+          const now = new Date();
+          let deadline = "";
+
+          switch (deadlineType) {
+            case "Heute":
+              // End of today
+              deadline = new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                now.getDate(),
+                23,
+                59
+              );
+              break;
+            case "Morgen":
+              // End of tomorrow
+              const tomorrow = new Date(now);
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              deadline = new Date(
+                tomorrow.getFullYear(),
+                tomorrow.getMonth(),
+                tomorrow.getDate(),
+                23,
+                59
+              );
+              break;
+            case "none":
+              // No deadline - clear the deadline field
+              deadline = null;
+              break;
+          }
+
+          if (deadline) {
+            deadlineInput.value = deadline.toISOString();
+          }
+        }
+      }
+
+      // Handle custom deadline input change
+      document.addEventListener("DOMContentLoaded", function () {
+        const customInput = document.getElementById("customDeadline");
+        const deadlineInput = document.getElementById("deadline");
+
+        customInput.addEventListener("change", function () {
+          if (this.value) {
+            deadlineInput.value = new Date(this.value).toISOString();
+          }
+        });
+      });
+
+      // Utility functions
+      function formatDate(dateString) {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffTime = Math.abs(now - date);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        const options = {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        };
+
+        // Add year if not current year
+        if (date.getFullYear() !== now.getFullYear()) {
+          options.year = "numeric";
+        }
+
+        return date.toLocaleDateString("de-DE", options);
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+    </script>
+  </body>
+</html>

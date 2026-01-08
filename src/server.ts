@@ -4,7 +4,7 @@ import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3007;
 
 // File paths
 const PRINTED_TODOS_FILE = path.join(__dirname, "../data/printed-todos.json");
@@ -16,17 +16,34 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 // Types
-interface Todo {
+interface RegularTodo {
   id: string;
+  type?: "TODO";
   todo: string;
   deadline?: string;
   assignee: string;
   createdAt: string;
 }
 
-interface PrintedTodo extends Todo {
+interface ShoppingList {
+  id: string;
+  type: "SHOPPING_LIST";
+  title: string;
+  items: string[];
+  createdAt: string;
+}
+
+type Todo = RegularTodo | ShoppingList;
+
+interface PrintedTodo extends RegularTodo {
   printedAt: string;
 }
+
+interface PrintedShoppingList extends ShoppingList {
+  printedAt: string;
+}
+
+type PrintedItem = PrintedTodo | PrintedShoppingList;
 
 interface PrinterStatus {
   printer_id: string;
@@ -63,7 +80,7 @@ let printStats: PrintStats = {
 };
 
 // Helper functions for printed todos
-function loadPrintedTodos(): PrintedTodo[] {
+function loadPrintedItems(): PrintedItem[] {
   try {
     if (fs.existsSync(PRINTED_TODOS_FILE)) {
       const data = fs.readFileSync(PRINTED_TODOS_FILE, "utf8");
@@ -71,27 +88,32 @@ function loadPrintedTodos(): PrintedTodo[] {
     }
     return [];
   } catch (error) {
-    console.error("Error loading printed todos:", error);
+    console.error("Error loading printed items:", error);
     return [];
   }
 }
 
-function savePrintedTodos(printedTodos: PrintedTodo[]): void {
+function savePrintedItems(printedItems: PrintedItem[]): void {
   try {
-    fs.writeFileSync(PRINTED_TODOS_FILE, JSON.stringify(printedTodos, null, 2));
+    fs.writeFileSync(PRINTED_TODOS_FILE, JSON.stringify(printedItems, null, 2));
   } catch (error) {
-    console.error("Error saving printed todos:", error);
+    console.error("Error saving printed items:", error);
   }
 }
 
-function addToPrintedTodos(todo: Todo): void {
-  const printedTodos = loadPrintedTodos();
-  const printedTodo: PrintedTodo = {
-    ...todo,
+function addToPrintedItems(item: Todo): void {
+  const printedItems = loadPrintedItems();
+  const printedItem: PrintedItem = {
+    ...item,
     printedAt: new Date().toISOString(),
-  };
-  printedTodos.push(printedTodo);
-  savePrintedTodos(printedTodos);
+  } as PrintedItem;
+  printedItems.push(printedItem);
+  savePrintedItems(printedItems);
+}
+
+// Type guard for shopping list
+function isShoppingList(item: Todo): item is ShoppingList {
+  return item.type === "SHOPPING_LIST";
 }
 
 // Middleware
@@ -148,19 +170,40 @@ app.get("/todos", (req, res) => {
 });
 
 app.post("/todos", (req, res) => {
-  const { todo, deadline, assignee } = req.body;
+  const { type, todo, deadline, assignee, title, items } = req.body;
 
-  if (!todo || !assignee) {
-    return res
-      .status(400)
-      .json({ error: "Missing required fields: todo, assignee" });
+  // Handle shopping list
+  if (type === "SHOPPING_LIST") {
+    if (!title || !items || !Array.isArray(items)) {
+      return res
+        .status(400)
+        .json({ error: "Shopping list requires: title, items (array)" });
+    }
+
+    const newShoppingList: ShoppingList = {
+      id: uuidv4(),
+      type: "SHOPPING_LIST",
+      title,
+      items,
+      createdAt: new Date().toISOString(),
+    };
+
+    todos.push(newShoppingList);
+    return res.status(201).json(newShoppingList);
   }
 
-  const newTodo: Todo = {
+  // Handle regular todo
+  if (!todo) {
+    return res
+      .status(400)
+      .json({ error: "Missing required field: todo" });
+  }
+
+  const newTodo: RegularTodo = {
     id: uuidv4(),
     todo,
     deadline: deadline || undefined,
-    assignee,
+    assignee: assignee || "",
     createdAt: new Date().toISOString(),
   };
 
@@ -168,19 +211,45 @@ app.post("/todos", (req, res) => {
   res.status(201).json(newTodo);
 });
 
-app.delete("/todos/:id", (req, res) => {
-  const { id } = req.params;
-  const todoToDelete = todos.find((todo) => todo.id === id);
+// Bulk delete - for printer service
+app.delete("/todos", (req, res) => {
+  const { ids } = req.body;
 
-  if (!todoToDelete) {
-    return res.status(404).json({ error: "Todo not found" });
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: "Missing required field: ids (array)" });
   }
 
-  // Add to printed todos file
-  addToPrintedTodos(todoToDelete);
+  const deletedIds: string[] = [];
+
+  for (const id of ids) {
+    const itemToDelete = todos.find((item) => item.id === id);
+    if (itemToDelete) {
+      addToPrintedItems(itemToDelete);
+      deletedIds.push(id);
+      printStats.totalPrinted++;
+    }
+  }
+
+  todos = todos.filter((item) => !deletedIds.includes(item.id));
+  printStats.lastPrintTime = new Date().toISOString();
+
+  res.json({ deleted: deletedIds.length, ids: deletedIds });
+});
+
+// Single delete - for UI
+app.delete("/todos/:id", (req, res) => {
+  const { id } = req.params;
+  const itemToDelete = todos.find((item) => item.id === id);
+
+  if (!itemToDelete) {
+    return res.status(404).json({ error: "Item not found" });
+  }
+
+  // Add to printed items file
+  addToPrintedItems(itemToDelete);
 
   // Remove from active todos
-  todos = todos.filter((todo) => todo.id !== id);
+  todos = todos.filter((item) => item.id !== id);
 
   // Track successful print
   printStats.totalPrinted++;
@@ -191,14 +260,14 @@ app.delete("/todos/:id", (req, res) => {
 
 // New endpoint to retrieve printed todos history
 app.get("/printed-todos", (req, res) => {
-  const printedTodos = loadPrintedTodos();
+  const printedItems = loadPrintedItems();
 
   // Sort by printedAt timestamp, most recent first
-  const sortedPrintedTodos = printedTodos.sort(
+  const sortedPrintedItems = printedItems.sort(
     (a, b) => new Date(b.printedAt).getTime() - new Date(a.printedAt).getTime()
   );
 
-  res.json(sortedPrintedTodos);
+  res.json(sortedPrintedItems);
 });
 
 // 3. Printer status routes - Enhanced for POS monitoring
@@ -294,12 +363,12 @@ app.post("/test-status/:status", (req, res) => {
 
 // Additional endpoint for print statistics
 app.get("/print-stats", (req, res) => {
-  const printedTodos = loadPrintedTodos();
+  const printedItems = loadPrintedItems();
 
   res.json({
     ...printStats,
     pendingTodos: todos.length,
-    totalPrintedFromFile: printedTodos.length,
+    totalPrintedFromFile: printedItems.length,
     printerOnline: printerStatus.is_online,
     lastActivity: printerStatus.last_updated,
   });
