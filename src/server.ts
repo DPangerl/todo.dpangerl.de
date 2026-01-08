@@ -155,13 +155,15 @@ app.get("/", (req, res) => {
 app.get("/todos", (req, res) => {
   // Sort by deadline for printer (todos with deadlines first, then by creation time)
   const sortedTodos = todos.sort((a, b) => {
+    const aDeadline = "deadline" in a ? a.deadline : undefined;
+    const bDeadline = "deadline" in b ? b.deadline : undefined;
     // If both have deadlines, sort by deadline
-    if (a.deadline && b.deadline) {
-      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    if (aDeadline && bDeadline) {
+      return new Date(aDeadline).getTime() - new Date(bDeadline).getTime();
     }
     // If only one has deadline, it goes first
-    if (a.deadline && !b.deadline) return -1;
-    if (!a.deadline && b.deadline) return 1;
+    if (aDeadline && !bDeadline) return -1;
+    if (!aDeadline && bDeadline) return 1;
     // If neither has deadline, sort by creation time
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
