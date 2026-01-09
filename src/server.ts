@@ -18,9 +18,10 @@ function generateToken(): string {
   return uuidv4() + "-" + Date.now();
 }
 
-// Verify token
+// Verify token (also accepts password as API token for services like printer)
 function isValidToken(token: string | undefined): boolean {
-  return token ? validTokens.has(token) : false;
+  if (!token) return false;
+  return validTokens.has(token) || token === AUTH_PASSWORD;
 }
 
 // File paths
