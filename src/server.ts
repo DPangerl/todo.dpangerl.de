@@ -2,9 +2,26 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3007;
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD || "changeme";
+
+// Simple token storage (in production, use a proper session store)
+const validTokens = new Set<string>();
+
+// Generate a simple auth token
+function generateToken(): string {
+  return uuidv4() + "-" + Date.now();
+}
+
+// Verify token
+function isValidToken(token: string | undefined): boolean {
+  return token ? validTokens.has(token) : false;
+}
 
 // File paths
 const PRINTED_TODOS_FILE = path.join(__dirname, "../data/printed-todos.json");
@@ -139,6 +156,60 @@ app.use((req, res, next) => {
       description: "Printer connection timeout - no updates for 10+ seconds",
       can_print: false,
     };
+  }
+
+  next();
+});
+
+// Authentication endpoints (no auth required)
+app.post("/auth/login", (req, res) => {
+  const { password } = req.body;
+
+  if (password === AUTH_PASSWORD) {
+    const token = generateToken();
+    validTokens.add(token);
+    res.json({ success: true, token });
+  } else {
+    res.status(401).json({ success: false, error: "Invalid password" });
+  }
+});
+
+app.post("/auth/verify", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+
+  if (isValidToken(token)) {
+    res.json({ valid: true });
+  } else {
+    res.status(401).json({ valid: false });
+  }
+});
+
+app.post("/auth/logout", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token) {
+    validTokens.delete(token);
+  }
+  res.json({ success: true });
+});
+
+// Authentication middleware for protected routes
+app.use((req, res, next) => {
+  // Skip auth for static files and auth endpoints
+  if (
+    req.path.startsWith("/auth/") ||
+    req.path === "/" ||
+    req.path.endsWith(".html") ||
+    req.path.endsWith(".css") ||
+    req.path.endsWith(".js") ||
+    req.path.endsWith(".ico")
+  ) {
+    return next();
+  }
+
+  const token = req.headers.authorization?.replace("Bearer ", "");
+
+  if (!isValidToken(token)) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   next();
